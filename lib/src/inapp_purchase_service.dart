@@ -1,8 +1,13 @@
+// ignore_for_file: depend_on_referenced_packages
+
 import 'dart:async';
 import 'dart:io';
 
 import 'package:flutter/foundation.dart';
 import 'package:in_app_purchase/in_app_purchase.dart';
+import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
+import 'package:in_app_purchase_android/in_app_purchase_android.dart';
+import 'package:in_app_purchase_android/billing_client_wrappers.dart';
 import 'package:in_app_purchase_storekit/in_app_purchase_storekit.dart';
 import 'package:in_app_purchase_storekit/store_kit_wrappers.dart';
 import 'package:package_info/package_info.dart';
@@ -36,17 +41,78 @@ class InAppPurchaseService implements InAppPurchaseServiceInterface {
       _inAppPurchase.purchaseStream.listen((purchaseList) async {
         if (purchaseList.isEmpty) hasSubscribe?.call(false);
         for (var purchaseDetails in purchaseList) {
-          if (purchaseDetails is AppStorePurchaseDetails) {
-            SKPaymentTransactionWrapper skProduct =
-                (purchaseDetails as AppStorePurchaseDetails)
-                    .skPaymentTransaction;
-            print(skProduct.transactionState);
-          }
+          // debugPrint('Purchase ${purchaseDetails}');
+          // if (purchaseDetails is AppStorePurchaseDetails) {
+          //   SKPaymentTransactionWrapper skProduct =
+          //       (purchaseDetails as AppStorePurchaseDetails)
+          //           .skPaymentTransaction;
+          //   print(skProduct.transactionState);
+          // }
 
           switch (purchaseDetails.status) {
             case PurchaseStatus.pending:
               break;
             case PurchaseStatus.purchased:
+              //final bool valid = await validate(purchaseDetails);
+              // if (valid) {
+              //   deliverProduct(purchaseDetails);
+              // } else {
+              //   _handleInvalidPurchase(purchaseDetails);
+              //   return;
+              // }
+              purchases.add(purchaseDetails);
+              hasSubscribe?.call(true);
+              onSucessful?.call(purchaseDetails);
+              onSucessful = null;
+              onError = null;
+              break;
+            case PurchaseStatus.restored:
+              //final bool valid = await validate(purchaseDetails);
+              // if (valid) {
+              //   deliverProduct(purchaseDetails);
+              // } else {
+              //   _handleInvalidPurchase(purchaseDetails);
+              //   return;
+              // }
+              var data = <String, dynamic>{
+                'productId': '',
+                'purchaseId': '',
+                'status': '',
+                'store': '',
+                'transactionDate': '',
+                'pendingCompletePurchase': '',
+              };
+
+              switch (purchaseDetails.runtimeType) {
+                case AppStorePurchaseDetails:
+                  var purchaseStore =
+                      (purchaseDetails as AppStorePurchaseDetails);
+                  data = {
+                    'productId': purchaseStore.productID,
+                    'purchaseId': purchaseStore.purchaseID ?? '',
+                    'status': purchaseStore.status.name,
+                    'store': purchaseStore.verificationData.source,
+                    'transactionDate': purchaseStore.transactionDate.toString(),
+                    'pendingCompletePurchase':
+                        purchaseStore.pendingCompletePurchase,
+                  };
+                  debugPrint(data.toString());
+                  break;
+                case GooglePlayPurchaseDetails:
+                  var purchaseStore =
+                      (purchaseDetails as GooglePlayPurchaseDetails);
+                  data = {
+                    'productId': purchaseStore.productID,
+                    'purchaseId': purchaseStore.purchaseID ?? '',
+                    'status': purchaseStore.status.name,
+                    'store': purchaseStore.verificationData.source,
+                    'transactionDate': purchaseStore.transactionDate.toString(),
+                    'pendingCompletePurchase':
+                        purchaseStore.pendingCompletePurchase,
+                  };
+                  debugPrint(data.toString());
+              }
+
               purchases.add(purchaseDetails);
               hasSubscribe?.call(true);
               onSucessful?.call(purchaseDetails);
@@ -56,13 +122,6 @@ class InAppPurchaseService implements InAppPurchaseServiceInterface {
             case PurchaseStatus.error:
               debugPrint(purchaseDetails.error!.message.toString());
               onError?.call(purchaseDetails);
-              onSucessful = null;
-              onError = null;
-              break;
-            case PurchaseStatus.restored:
-              purchases.add(purchaseDetails);
-              hasSubscribe?.call(true);
-              onSucessful?.call(purchaseDetails);
               onSucessful = null;
               onError = null;
               break;
@@ -110,6 +169,8 @@ class InAppPurchaseService implements InAppPurchaseServiceInterface {
           applicationUserName: userUniqueID,
         ),
       );
+    } else {
+      throw 'inapp_purchase_not_available';
     }
   }
 
@@ -121,16 +182,18 @@ class InAppPurchaseService implements InAppPurchaseServiceInterface {
       String package = packageInfo.packageName;
       var link =
           'https://play.google.com/store/account/subscriptions?sku=$plan&package=$package';
-      if (await canLaunch(link)) {
-        launch(link);
+      var uri = Uri.parse(link);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
       } else {
         throw Exception();
       }
     }
     if (Platform.isIOS) {
       var link = 'https://apps.apple.com/account/subscriptions';
-      if (await canLaunch(link)) {
-        launch(link);
+      var uri = Uri.parse(link);
+      if (await canLaunchUrl(uri)) {
+        await launchUrl(uri);
       } else {
         throw Exception();
       }
@@ -167,7 +230,6 @@ class InAppPurchaseService implements InAppPurchaseServiceInterface {
 
   @override
   Future<void> downgradeSubscribe() {
-    // TODO: implement downgradeSubscribe
     throw UnimplementedError();
   }
 
